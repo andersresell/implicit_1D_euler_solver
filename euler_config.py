@@ -15,6 +15,7 @@ class Config:
                     ):
         self.L = L
         self.N = N   
+        self.I_DOMAIN = range(2,N+2) 
         self.dx = self.L / self.N  
         self.CFL = CFL
         self.flux_type = flux_type
@@ -42,8 +43,9 @@ class Config:
         self.rho_r = rho_r
         self.u_r = u_r
         self.p_r = p_r
+        self.initial_cond_specified = True
         
-    def add_plot(self, animate=True, plot_variable='p'):
+    def add_plotter(self, animate=True, plot_variable='p'):
         self.plot_from_solver = True
         self.animate = animate
         self.plot_variable = plot_variable

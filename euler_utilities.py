@@ -2,6 +2,7 @@
 import numpy as np
 from euler_constants import *
 from euler_config import Config
+import numba as nb
 
 def conservative2primitive(U):
     assert U.shape == (N_VAR,)
@@ -11,9 +12,9 @@ def conservative2primitive(U):
     
 def primitive2conservative(V):
     assert V.shape == (N_VAR,)
-    return np.array(V[0],
+    return np.array([V[0],
                     V[0] * V[1],
-                    V[2] * GAMMA_MINUS_ONE_INV + 0.5 * V[0] * V[1]**2)
+                    V[2] * GAMMA_MINUS_ONE_INV + 0.5 * V[0] * V[1]**2])
     
     
 def calc_rusanov_flux(U_L, U_R):
@@ -53,34 +54,45 @@ def minmod(a,b):
     # result = np.where(signs > 0, signs * mins, 0)
     # return result
     sign = np.sign(a)
-    return sign * np.maximum(np.zeros((N_VAR,)), np.minimum(np.abs(a), sign * b))
+    return sign * np.maximum(np.zeros((N_VAR,)), np.minimum(np.abs(a), sign * b)) 
 
 def calc_extrapolated_values(i, U, limiter):
-    """returns U_L and U_R at face i+1/2"""
-    U_L = U[i] + 0.5 * limiter(U[i] - U[i-1], U[i+1] - U[i])
-    U_R = U[i+1] - 0.5 * limiter(U[i+1] - U[i], U[i+2] - U[i+1])
-    assert U_L.shape == (N_VAR,) and U_R.shape == (N_VAR,)
-    return (U_L, U_R)
+    """returns U_L and U_R at face i+1/2. Extrapolation is done with primite variables"""
+    V_im = conservative2primitive(U[i-1])
+    V_i = conservative2primitive(U[i])
+    V_ip = conservative2primitive(U[i+1])
+    V_ipp = conservative2primitive(U[i+2])
+    V_L = V_i + 0.5 * limiter(V_i - V_im, V_ip - V_i)
+    V_R = V_ip - 0.5 * limiter(V_ip - V_i, V_ipp - V_ip)
+    
+    assert V_L.shape == (N_VAR,) and V_R.shape == (N_VAR,)
+    return (primitive2conservative(V_L), primitive2conservative(V_R))
+    # U_L = U[i] + 0.5 * limiter(U[i] - U[i-1], U[i+1] - U[i])
+    # U_R = U[i+1] - 0.5 * limiter(U[i+1] - U[i], U[i+2] - U[i+1])
+    # assert U_L.shape == (N_VAR,) and U_R.shape == (N_VAR,)
+    # return (U_L, U_R)
 
 def set_ghost_cells(config: Config, U):
     N = config.N
-    assert U.shape[0] == N+4 and config.U.shape[1] == N_VAR
+    assert U.shape ==(N+N_GHOST,N_VAR)
     
     if config.left_BC == 'non_reflective':
-        U[0:2] = U[2:4]
+        U[0] = U[3]
+        U[1] = U[2]
     else:
         raise ValueError(f"Invalid BC type: {config.left_BC}")
     
     if config.right_BC == 'non_reflective':
-        U[N+2:N+4] = U[N:N+2]
+        U[N+2] = U[N+1]
+        U[N+3] = U[N]
     else:
         raise ValueError(f"Invalid BC type: {config.left_BC}")
     
 def calc_dt(config: Config, U):
-    assert U.shape[0] == config.N+4 and U.shape[1] == N_VAR
+    assert U.shape == (config.N+N_GHOST, N_VAR)
     dt = 1e6
     for i in range(2, config.N+2):
-        dt = min(dt, calc_spectral_radii(U[i]) * config.dx / config.CFL)
+        dt = min(dt, config.dx * config.CFL / calc_spectral_radii(U[i]))
     config.dt = dt
    
     
@@ -100,8 +112,8 @@ def stopping_crit_reached(config: Config):
 def set_initial_cond_riemann(U, config: Config):
     assert U.shape == (config.N+N_GHOST, N_VAR) and config.initial_cond == 'riemann'
     
-    V_L = np.array(config.rho_l, config.u_l, config.p_l)
-    V_R = np.array(config.rho_r, config.u_r, config.p_r)
+    V_L = np.array([config.rho_l, config.u_l, config.p_l])
+    V_R = np.array([config.rho_r, config.u_r, config.p_r])
     
     U_L = primitive2conservative(V_L)
     U_R = primitive2conservative(V_R)
