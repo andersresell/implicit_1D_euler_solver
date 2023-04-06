@@ -2,7 +2,7 @@
 import numpy as np
 from euler_constants import *
 from euler_config import Config
-import numba as nb
+#import numba as nb
 
 def conservative2primitive(U):
     assert U.shape == (N_VAR,)
@@ -40,10 +40,22 @@ def calc_spectral_radii(U):
 
 def calc_flux(U):
     assert U.shape == (N_VAR,)
-    p = calc_pressure(U)
     return np.array([U[1],
-                        U[1]**2 / U[0] + p,
-                        U[1] / U[0] * (U[2] + p)])
+                    0.5*(3-GAMMA)*U[1]**2/U[0] + (GAMMA-1)*U[2],
+                    GAMMA*U[1]/U[0]*U[2] - 0.5*(GAMMA-1)*U[1]**3/U[0]**2])
+    
+    # p = calc_pressure(U)
+    # F1 = np.array([U[1],
+    #                     U[1]**2 / U[0] + p,
+    #                     U[1] / U[0] * (U[2] + p)])
+    # F2 = np.array([U[1],
+    #                0.5*(3-GAMMA)*U[1]**2/U[0] + (GAMMA-1)*U[2],
+    #                GAMMA*U[1]/U[0]*U[2] - 0.5*(GAMMA-1)*U[1]**3/U[0]**2])
+    
+    # equal_elem = F1 == F2
+    # print('F1',F1,'F2',F2)
+    # assert equal_elem.all()
+    # return F2
 
 def minmod(a,b):
     assert a.shape == (N_VAR,) and b.shape == (N_VAR,)
@@ -109,6 +121,15 @@ def stopping_crit_reached(config: Config):
         raise ValueError(f"Invalid stopping criterion: {config.stopping_crit[0]}")
     return False
 
+def stop_inner_iter(residual ,config: Config):
+    if residual < config.inner_iter_epsilon:
+        print('Inner iterations converged in',config.i_inner, 'iterations. Residual =', residual)
+        return True
+    elif config.i_inner >= config.max_inner_iter:
+        print('Inner iterations did not converge in',config.max_inner_iter, 'iterations')
+        return True
+    return False
+
 def set_initial_cond_riemann(U, config: Config):
     assert U.shape == (config.N+N_GHOST, N_VAR) and config.initial_cond == 'riemann'
     
@@ -123,3 +144,19 @@ def set_initial_cond_riemann(U, config: Config):
             U[i] = U_L
         else:
             U[i] = U_R
+
+def calc_flux_jacobian(U):
+    assert U.shape == (N_VAR,)
+    U1_U0 = U[1]/U[0]
+    U2_U0 = U[2]/U[0]
+    A = np.array([[0,                                      1,                                    0],
+                    [-0.5*(3-GAMMA)*U1_U0**2,                 (3-GAMMA)*U1_U0,                      GAMMA-1],
+                    [-GAMMA*U1_U0*U2_U0 + (GAMMA-1)*U1_U0**3, GAMMA*U2_U0 - 1.5*(GAMMA-1)*U1_U0**2, GAMMA*U1_U0]])  
+    
+    #remove when verified
+    assert np.isclose(np.matmul(A,U), calc_flux(U)).all()
+    return A
+
+def L2_norm_density(U, config: Config):
+    assert U.shape == (config.N, N_VAR)
+    return (np.dot(U[:,0].T, U[:,0]) * config.dx)**0.5

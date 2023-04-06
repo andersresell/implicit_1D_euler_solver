@@ -2,6 +2,7 @@ import numpy as np
 from euler_constants import *
 
 class Config:
+    """Contains all settings and some variables"""
     def __init__(self, 
                     L, 
                     N,
@@ -12,6 +13,8 @@ class Config:
                     left_BC='non_reflective',
                     right_BC='non_reflective',
                     time_discretization = 'explicit_euler',
+                    max_inner_iter = 10,
+                    inner_iter_epsilon = 1e-6
                     ):
         self.L = L
         self.N = N   
@@ -32,8 +35,12 @@ class Config:
         self.stopping_crit_reached = False
         
         self.plot_from_solver = False
-        
         self.initial_cond_specified = False
+        
+        self.max_inner_iter = max_inner_iter
+        self.inner_iter_epsilon = inner_iter_epsilon
+        self.i_inner = 0
+        
         
     def specify_riemann_initial_cond(self, rho_l, u_l, p_l, rho_r, u_r, p_r):
         self.initial_cond = 'riemann'
