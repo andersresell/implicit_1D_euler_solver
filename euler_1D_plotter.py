@@ -17,6 +17,8 @@ class Plotter1D:
         
     def update(self, U, config: Config):
         assert U.shape[0] == config.N+N_GHOST and U.shape[1] == N_VAR   
+        if not config.plot_from_solver:
+            return
         if config.animate or config.stopping_crit_reached:
             plt.cla()
             
@@ -34,4 +36,6 @@ class Plotter1D:
             plt.pause(0.000001)
             
             self.first_update = False
-            
+
+            if config.stopping_crit_reached:
+                plt.show()

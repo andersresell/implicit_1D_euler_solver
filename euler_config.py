@@ -52,7 +52,8 @@ class Config:
         self.p_r = p_r
         self.initial_cond_specified = True
         
-    def add_plotter(self, animate=True, plot_variable='p'):
+    def add_plotter(self, animate=True, plot_variable='p', plot_on_inner_iter='False'):
         self.plot_from_solver = True
         self.animate = animate
         self.plot_variable = plot_variable
+        self.plot_on_inner_iter = plot_on_inner_iter

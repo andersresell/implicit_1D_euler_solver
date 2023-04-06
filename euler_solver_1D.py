@@ -21,10 +21,14 @@ class EulerSolver1D:
         self.U = np.zeros_like(self.U_old)
         self.R = np.zeros((self.N, N_VAR))
         self.dR = np.zeros((self.N * N_VAR, self.N * N_VAR))
+        if config.time_discretization == 'BDF2':
+            self.U_old_old = np.zeros_like(self.U_old)
         
         assert config.initial_cond_specified == True
         if config.initial_cond == 'riemann':
             eu.set_initial_cond_riemann(self.U_old, self.config)
+            if config.time_discretization == 'BDF2':
+                self.U_old_old[self.I_DOMAIN] = self.U_old[self.I_DOMAIN]
         else:
             raise ValueError(f"Invalid initial condition type: {config.initial_cond}")
         
@@ -51,8 +55,8 @@ class EulerSolver1D:
             # print(self.config.n)
             # print(self.config.dt)
             
-            if self.config.plot_from_solver:
-                self.plotter.update(self.U_old, self.config)
+            
+            self.plotter.update(self.U_old, self.config)
             
             
             eu.calc_dt(self.config, self.U_old)
@@ -68,9 +72,9 @@ class EulerSolver1D:
                 print('stopping criterion reached')
                 break
             
-        if self.config.plot_from_solver:
-            self.plotter.update(self.U_old, self.config)
-            plt.show()    
+        
+        self.plotter.update(self.U_old, self.config)
+                
                 
     def step(self):
         time_disc = self.config.time_discretization
@@ -78,7 +82,7 @@ class EulerSolver1D:
             self.explicit_euler_step()
         elif time_disc == 'TVD_RK3':
             self.TVD_RK3_step()
-        elif time_disc == 'implicit_euler' or time_disc == 'backward_differencing_2nd':
+        elif time_disc == 'implicit_euler' or time_disc == 'BDF2':
             self.implicit_step()
         else: raise ValueError(f"Invalid time discretization: {self.config.time_discretization}")
             
@@ -108,7 +112,6 @@ class EulerSolver1D:
         self.config.i_inner = 0
         dt = self.config.dt
         
-        eu.set_ghost_cells(self.config, self.U_old)
         self.U[self.I_DOMAIN] = self.U_old[self.I_DOMAIN]
         #print('U_old',self.U_old)
         while True:
@@ -123,17 +126,19 @@ class EulerSolver1D:
             LHS = np.identity(N_VAR * self.N) / dt - self.dR
             if self.config.time_discretization == 'implicit_euler':
                 RHS = (-(self.U[self.I_DOMAIN] - self.U_old[self.I_DOMAIN])/dt + self.R).flatten()
+            elif self.config.time_discretization == 'BDF2':
+                RHS = (-(3 / 2* self.U[self.I_DOMAIN] - 2*self.U_old[self.I_DOMAIN] + 1 / 2*self.U_old_old[self.I_DOMAIN])/dt + self.R).flatten()
             else: 
                 raise ValueError(f"Invalid time discretization: {self.config.time_discretization}")
 
             delta_U = np.linalg.solve(LHS, RHS).reshape((self.N, N_VAR))
             self.U[self.I_DOMAIN] += delta_U
             
-            self.plotter.update(self.U, self.config)
+            if self.config.plot_on_inner_iter:
+                self.plotter.update(self.U, self.config)
             
             L2_density_res = eu.L2_norm_density(delta_U, self.config)
             #print('delta U',delta_U)
-            print('dt',dt)
             #print('U_k',self.U)
             print('res',L2_density_res)
             
@@ -141,6 +146,8 @@ class EulerSolver1D:
                 break
         #print('U_old',self.U_old)
         #print('delta',self.U - self.U_old)
+        if self.config.time_discretization == 'BDF2':
+            self.U_old_old[self.I_DOMAIN] = self.U_old[self.I_DOMAIN]
         self.U_old[self.I_DOMAIN] = self.U[self.I_DOMAIN]
         #print('U_old',self.U_old)
             
